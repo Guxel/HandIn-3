@@ -73,52 +73,78 @@ class call(claim):
         -------
         volatility that yields value of option
         """
-        if "convergence" in v:
-            convergence = v['convergence']
-        else:
-            convergence = 1E-15
-            
-        if "sigma" in v: #step 0
-            sigma = v['sigma']
-        else:
-            sigma = np.sqrt(2*np.pi/v['T'])*(v['price']-(v['S']-v['K'])/2)/(v['S']-(v['S']-v['K'])/2)
-            
-        if "max iterations" in v:
-            maxIterations = v['max iterations']
-        else:
-            maxIterations = 1E6
-            
-        lb = 0
-        ub = np.where(sigma * 1000>10000,sigma * 1000,10000)
-        lastDiff = 0
-        
-        if v['T'] <= 0:
-            raise Exception(f"T={v['T']} not valid, make it positive")
-            
-        for i in range(0,int(maxIterations)):
-            pi = self.price(sigma=sigma,S=v['S'],K=v['K'],r=v['r'],T=v['T']) #step 1
-            diff =v['price']- pi
-            
-            if np.max(np.abs(diff/v['price'])) < convergence:
-                return sigma
-            
-            print(f"Ite {i}, {np.max(np.abs(diff)/v['price'])}")
-            if np.all(diff == lastDiff):
-                print("WARNING, Algorithm is stuck, Convergence not reached")
-                return sigma
-            
-            lastDiff = diff
-            
-            lb = np.where(diff >= 0, sigma, lb) #step 2
-            ub = np.where(diff <= 0, sigma, ub)
-            
-            with np.errstate(divide='ignore', invalid='ignore',over = 'ignore'): #step 3
-                newton = sigma + diff/self.vega(sigma=sigma,S=v['S'],K=v['K'],r=v['r'],T=v['T'])
-            
-            sigma = np.where((lb*1.1 < newton) & (newton < 0.9*ub),newton,(ub+lb)/2) #step 4
+        with stats.work_precision(self.precision):
+            if "convergence" in v:
+                convergence = v['convergence']
+            else:
+                convergence = 1E-5
                 
-        print("WARNING, max itterations breached, Convergence not reached")
-        return sigma
+            if "sigma" in v: #step 0
+                sigma = v['sigma']
+            else:
+                sigma = np.sqrt(2*np.pi/v['T'])*(v['price']-(v['S']-v['K'])/2)/(v['S']-(v['S']-v['K'])/2)
+                
+            if "maxIterations" in v:
+                maxIterations = v['maxIterations']
+            else:
+                maxIterations = 1E6
+            
+            if "method" in v: #simple or optimal
+                method = v['method']
+            else:
+                method ='bach' #set to optimal
+                
+            if method == "optimal":
+                goalLow = 2*(v['price']-v['S']+v['K']*np.exp(-v['r']*v['T']))
+                goalHigh = v['price']
+                goal = np.where(v['K']<v['S'],goalLow,goalHigh)
+            elif method == "bach":
+                v['r'] = 0
+                d = (v['S']-v['K'])/(v['sigma']*stats.sqrt(v['T']))
+                goalLow = -(v['S']-v['K'])*stats.erfc(d/stats.sqrt(2))+2*v['sigma']*stats.sqrt(v['T'])*stats.norm_pdf(d)
+                goalHigh = (v['S']-v['K'])*stats.erfc(-d/stats.sqrt(2))+2*v['sigma']*stats.sqrt(v['T'])*stats.norm_pdf(d)
+                goal = np.where(v['K']<v['S'],goalLow,goalHigh)
+            else:
+                goal = v['price']
+                
+            lb = stats.mpfy(0)
+            ub = stats.mpfy(np.where(sigma * 1000>10000,sigma * 1000,10000))
+            lastDiff = 0
+            
+            if v['T'] <= 0:
+                raise Exception(f"T={v['T']} not valid, make it positive")
+                
+            for i in range(0,int(maxIterations)):
+                if method == "bach" or method == "optimal":
+                    d1 = (stats.log(v['S'] / v['K']) + (v['r'] + 0.5 * sigma ** 2) * v['T']) / (sigma * stats.sqrt(v['T']))
+                    d2 = d1 - sigma * stats.sqrt(v['T'])
+                    hitLow = - v['S']*stats.erfc(d1/stats.sqrt(2)) + v['K']*np.exp(-v['T']*v['r'])*stats.erfc(d2/stats.sqrt(2))
+                    hitHigh = v['S']*stats.erfc(-d1/stats.sqrt(2)) - v['K']*np.exp(-v['T']*v['r'])*stats.erfc(-d2/stats.sqrt(2))
+                    diff = 0.5*(goal - np.where(v['K']<v['S'],hitLow,hitHigh))
+                else:
+                    pi = self.price(sigma=sigma,S=v['S'],K=v['K'],r=v['r'],T=v['T']) #step 1
+                    diff =goal- pi
+                    
+                lb = np.where(diff >= 0, sigma, lb) #step 2
+                ub = np.where(diff <= 0, sigma, ub)
+                
+                if np.max(ub-lb) < convergence:
+                    return sigma
+                
+                print(f"Ite {i}, {round(np.max(ub-lb),10)}")
+                if np.all(diff == lastDiff):
+                    print("WARNING, Algorithm is stuck, Convergence not reached")
+                    return sigma
+                
+                lastDiff = diff
+                
+                
+                with np.errstate(divide='ignore', invalid='ignore',over = 'ignore'): #step 3
+                    newton = sigma + diff/self.vega(sigma=sigma,S=v['S'],K=v['K'],r=v['r'],T=v['T'])
+                    
+                sigma = np.where((lb*1.1 < newton) & (newton < 0.9*ub),newton,(ub+lb)/2) #step 4
+            print("WARNING, max itterations breached, Convergence not reached")
+            return sigma
         
     def invertS(self, **v):
         """
@@ -163,7 +189,13 @@ class call(claim):
             diff = np.max(np.abs(v['price']-optGuess)/v['price'])
         return SGuess
     
-
+    def d1(self, **v):
+        with stats.work_precision(self.precision), np.errstate(divide='ignore', invalid='ignore'): #divide by 0 mute
+            return (stats.log(v['S'] / v['K']) + (v['r'] + 0.5 * v['sigma'] ** 2) * v['T']) / (v['sigma'] * stats.sqrt(v['T']))
+    
+    def d2(self, **v):
+        with stats.work_precision(self.precision), np.errstate(divide='ignore', invalid='ignore'): #divide by 0 mute
+            return self.d1(**v) - v['sigma'] * stats.sqrt(v['T'])
 
 if __name__ == '__main__':
     opt = call()
