@@ -8,7 +8,7 @@ from .base import claim
 import numpy as np
 import scipy
 
-class binary(claim):
+class put(claim):
     
     def payoff(self,**v):
         """
@@ -46,7 +46,7 @@ class binary(claim):
             d2 = d1 - v['sigma'] * np.sqrt(v['T'])
            
             opt = - v['S'] * scipy.stats.norm.cdf(-d1) + v['K'] * np.exp(-v['r'] * v['T']) * scipy.stats.norm.cdf(-d2)
-            return  np.where(v['T']==0,self.payoff(self,**v),opt)
+            return  np.where(v['T']==0,self.payoff(**v),opt)
 
 
 if __name__ == '__main__':

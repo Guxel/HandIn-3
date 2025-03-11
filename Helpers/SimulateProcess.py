@@ -16,13 +16,19 @@ def simulate_brownian(delta,n,m,p=1):
     brownian[:,1:] = np.random.normal(0,np.sqrt(delta),[p,n,m])
     return np.cumsum(brownian, axis = 1)
 
-def Simulate_GBM(T,delta,S0,mu,sigma,m=1):
+def Simulate_GBM(T,delta,S0,mu,sigma,m=1,antihetic = False):
     n = int(T/delta)
     brownian = np.zeros([n+1,m])
-    brownian[1:] = np.random.normal(0,np.sqrt(delta),[n,m])
+    if antihetic:
+        brownian[1:,0:int(m/2)] = np.random.normal(0,np.sqrt(delta),[n,int(m/2)])
+        brownian[1:,int(m/2):int(m/2)*2] = -brownian[1:,0:int(m/2)]
+        if m & 0x1:
+            brownian[1:,-1] = np.random.normal(0,np.sqrt(delta),n)
+    else:
+        brownian[1:] = np.random.normal(0,np.sqrt(delta),[n,m])
     brownian = np.cumsum(brownian, axis = 0)
     
-    deltaT = np.arange(0,m+1).reshape(-1, 1) * delta
+    deltaT = np.arange(0,n+1).reshape(-1, 1) * delta
     
     return S0 * np.exp((mu-0.5 * (sigma**2) ) * deltaT + sigma * brownian)
 

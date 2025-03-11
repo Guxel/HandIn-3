@@ -80,7 +80,8 @@ plt.legend()
 plt.ylabel("$\sigma^{imp}$",labelpad=1)
 plt.xlabel("K")
 
-((df50['imp vol'][50.1]-df50['imp vol'][49.9])/df50['imp vol'][50]) / ((df['imp vol'][100.1]-df['imp vol'][99.9])/df['imp vol'][100])
+((df50['imp vol'][50.1]-df50['imp vol'][49.9])/df50['imp vol'][50])
+((df['imp vol'][100.1]-df['imp vol'][99.9])/df['imp vol'][100])
 
 df['imp vol'][0.1]
 df50['imp vol'][0.1]

@@ -41,12 +41,20 @@ class call(claim):
         Market value of option
 
         """
-        with stats.work_precision(self.precision), np.errstate(divide='ignore', invalid='ignore'): #divide by 0 mute
-            d1 = (stats.log(v['S'] / v['K']) + (v['r'] + 0.5 * v['sigma'] ** 2) * v['T']) / (v['sigma'] * stats.sqrt(v['T']))
-            d2 = d1 - v['sigma'] * stats.sqrt(v['T'])
-           
-            price = v['S'] * stats.norm_cdf(d1) - v['K'] * stats.exp(-v['r'] * v['T']) * stats.norm_cdf(d2)
-            return  np.where(v['T']==0,self.payoff(**v),price)
+        if self.precision == 16:
+            with np.errstate(divide='ignore', invalid='ignore'): #divide by 0 mute
+                d1 = (np.log(v['S'] / v['K']) + (v['r'] + 0.5 * v['sigma'] ** 2) * v['T']) / (v['sigma'] * np.sqrt(v['T']))
+                d2 = d1 - v['sigma'] * np.sqrt(v['T'])
+               
+                price = v['S'] * scipy.stats.norm.cdf(d1) - v['K'] * np.exp(-v['r'] * v['T']) * scipy.stats.norm.cdf(d2)
+                return  np.where(v['T']==0,self.payoff(**v),price)
+        else:
+            with stats.work_precision(self.precision), np.errstate(divide='ignore', invalid='ignore'): #divide by 0 mute
+                d1 = (stats.log(v['S'] / v['K']) + (v['r'] + 0.5 * v['sigma'] ** 2) * v['T']) / (v['sigma'] * stats.sqrt(v['T']))
+                d2 = d1 - v['sigma'] * stats.sqrt(v['T'])
+               
+                price = v['S'] * stats.norm_cdf(d1) - v['K'] * stats.exp(-v['r'] * v['T']) * stats.norm_cdf(d2)
+                return  np.where(v['T']==0,self.payoff(**v),price)
 
     def vega(self,**v):
         with stats.work_precision(self.precision),np.errstate(divide='ignore', invalid='ignore'): #divide by 0 mute
@@ -120,7 +128,7 @@ class call(claim):
                     d2 = d1 - sigma * stats.sqrt(v['T'])
                     hitLow = - v['S']*stats.erfc(d1/stats.sqrt(2)) + v['K']*np.exp(-v['T']*v['r'])*stats.erfc(d2/stats.sqrt(2))
                     hitHigh = v['S']*stats.erfc(-d1/stats.sqrt(2)) - v['K']*np.exp(-v['T']*v['r'])*stats.erfc(-d2/stats.sqrt(2))
-                    diff = 0.5*(goal - np.where(v['K']<v['S'],hitLow,hitHigh))
+                    diff = 0.5*(goal - np.where(v['K']<v['S'],hitLow,hitHigh)) #scaled to remove 2x factor
                 else:
                     pi = self.price(sigma=sigma,S=v['S'],K=v['K'],r=v['r'],T=v['T']) #step 1
                     diff =goal- pi
