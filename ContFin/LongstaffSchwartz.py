@@ -98,7 +98,7 @@ def priceDefault(option: claim,Sim,dt,r,regMethod = "simple",sklearn=False,moreI
         
     price = np.mean(np.dot(CF,DF))
     if moreInfo:
-        return price, CF, B
+        return price, CF, list(reversed(B))
     else:
         return price
     
@@ -157,6 +157,37 @@ def getFirstRegMSE(option: claim,Sim,dt,r,regMethod = "simple",sklearn=False,**v
     X = getDesign(Sim[ITM,-2],regMethod)
     beta = MatrixReg(X,payOff[ITM]*np.exp(-r * dt),sklearn)
     return np.mean(np.power(payOff[ITM]*np.exp(-r * dt)-np.dot(X,beta),2))
+
+def extractCF(tStop:int, option: claim,Sim,dt,r,regMethod = "simple",sklearn=False,moreInfo = False,**v):
+    """
+    Use Longstaf-Schwartz for pricing American options
+    """
+    n,T = Sim.shape
+    CF = np.zeros((n,T-1))
+    
+    payOff = option.payoff(S=Sim[:,-1],**v)
+    CF[:,-1] = payOff
+    DF = np.exp(-r * dt * np.arange(1,T))
+    
+    for t in range(T-2,0,-1):
+        payOff = option.payoff(S=Sim[:,t],**v)
+        ITM = payOff>0
+        
+        if np.any(ITM):
+            X = getDesign(Sim[ITM,t],regMethod)
+            regCoef = MatrixReg(X,np.dot(CF[ITM,t:],DF[:T-t-1]),sklearn)
+            
+            excercise = np.repeat(False,n)
+            excercise[ITM] = payOff[ITM] > np.dot(X,regCoef)
+            
+            CF[excercise,:] = 0
+            CF[excercise,t-1] = payOff[excercise]
+            
+            if t == tStop:
+                print(regCoef)
+                return CF
+    return CF
+
 
 
 def priceDefaultMultiple(option: claim,simMethod,dt,r,n,m,regMethod = "simple",sklearn=False,B=None,antihetic=True,**v):

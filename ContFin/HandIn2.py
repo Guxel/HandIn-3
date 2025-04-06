@@ -230,15 +230,13 @@ simulation = Simulate_GBM(mu=r,delta=delta,T=3,S0=1,m=100000,sigma=stdReal, anti
 p, CF, B = LSM.priceDefault(putOpt, simulation, dt = delta, r = r
                                   , K=1.1,regMethod="Laguerre3",sklearn=True, moreInfo = True)
 
-#CF = np.loadtxt("temp.csv")
-#simulation = np.loadtxt("temp2.csv")
-DF = np.exp(-r * delta * np.arange(1,766 ) )
+DF = np.exp(-r * delta * np.arange(1,252*3+1) )
 
 PayOff = putOpt.payoff(S=simulation[:,-2],K=1.1)
 PayOffN = putOpt.payoff(S=simulation[:,-1],K=1.1)
 
 ITM = PayOff > 0
-y = np.dot(PayOffN[ITM],DF[-1])
+y = np.dot(PayOffN[ITM],DF[0])
 
 X2 = LSM.getDesign(simulation[ITM,-2],'simple')
 beta2 = LSM.MatrixReg(X2,y,True)
@@ -254,50 +252,84 @@ y5 = np.dot(X5,beta5)
 
 PayOff2 = putOpt.payoff(S=simulation[:,1],K=1.1)
 
-ITM2 = PayOff2 > 0
-y2 = np.dot(CF[ITM,1:],DF[1:])
+CF2 = LSM.extractCF(1+1,putOpt, simulation, dt = delta, r = r
+                                  , K=1.1,regMethod="Laguerre3",sklearn=True, moreInfo = True)
 
-X22 = LSM.getDesign(simulation[ITM,1],'simple')
+ITM2 = PayOff2 > 0
+y2 = np.dot(CF2[ITM2,1:],DF[0:-1])
+
+X22 = LSM.getDesign(simulation[ITM2,1],'simple')
 beta22 = LSM.MatrixReg(X22,y2,True)
 y22 = np.dot(X22,beta22)
 
-X42 = LSM.getDesign(simulation[ITM,1],'Laguerre3')
+X42 = LSM.getDesign(simulation[ITM2,1],'Laguerre3')
 beta42 = LSM.MatrixReg(X42,y2,True)
 y42 = np.dot(X42,beta42)
 
-X52 = LSM.getDesign(simulation[ITM,1],'Laguerre5')
+X52 = LSM.getDesign(simulation[ITM2,1],'Laguerre5')
 beta52 = LSM.MatrixReg(X52,y2,True)
 y52 = np.dot(X52,beta52)
 
+PayOff3 = putOpt.payoff(S=simulation[:,252*2-1],K=1.1)
+ITM3 = PayOff3 > 0
+CF3 = LSM.extractCF(252*2,putOpt, simulation, dt = delta, r = r
+                                  , K=1.1,regMethod="Laguerre3",sklearn=True, moreInfo = True)
 
-fig, ax1 = plt.subplots(1,2)
+y3 = np.dot(CF3[ITM3,252*2-1:],DF[0:-(252*2-1)])
+
+X43 = LSM.getDesign(simulation[ITM3,252*2-1],'Laguerre3')
+beta43 = LSM.MatrixReg(X43,y3,True)
+y43 = np.dot(X43,beta43)
+
+X23 = LSM.getDesign(simulation[ITM3,252*2-1],'simple')
+beta23 =  LSM.MatrixReg(X23,y3,True)
+y23 = np.dot(X23,beta23)
+
+X53 = LSM.getDesign(simulation[ITM3,252*2-1],'Laguerre5')
+beta53 =  LSM.MatrixReg(X53,y3,True)
+y53 = np.dot(X53,beta53)
 
 
-ax1[0].plot(simulation[ITM, -2], y, 'bo', label="Disc Payoff", markersize=1)
-ax1[0].plot(simulation[ITM, -2], y2f, 'yo', label="2 poly", markersize=1)
-ax1[0].plot(simulation[ITM, -2], y4, 'o',color='black', label="3 Laguerre poly", markersize=1)
-ax1[0].plot(simulation[ITM, -2], y5, 'ro', label="4 Laguerre poly", markersize=1)
-ax1[0].set_ylabel("$")
+fig, ax1 = plt.subplots(1,3,figsize= (15,5))
+
+
+ax1[2].plot(simulation[ITM, -2], y, 'bo', label="Disc Payoff", markersize=1)
+ax1[2].plot(simulation[ITM, -2], y2f, 'yo', label="2 poly", markersize=1)
+ax1[2].plot(simulation[ITM, -2], y4, 'o',color='black', label="3 Laguerre poly", markersize=1)
+ax1[2].plot(simulation[ITM, -2], y5, 'ro', label="5 Laguerre poly", markersize=1)
 
 x_vec = np.linspace(simulation[ITM,-2].min(), simulation[ITM,-2].max(), 200)
-ax1[0].plot(x_vec, putOpt.payoff(S=x_vec,K=1.1), 'k-', linewidth=1, label="Payoff Now")
+ax1[2].plot(x_vec, putOpt.payoff(S=x_vec,K=1.1), 'k-', linewidth=1, label="Payoff Now")
 
-ax1[0].legend(loc="lower left")
-ax1[0].set_xlabel("X")
-ax1[0].set_title("Fits for t=T-1")
+ax1[2].legend(loc="upper right")
+ax1[2].set_xlabel("X")
+ax1[2].set_title("Fits for t=T-1/252")
 
-ax1[1].plot(simulation[ITM, 1], y2, 'bo', label="Disc Payoff", markersize=1)
-ax1[1].plot(simulation[ITM, 1], y22, 'yo', label="2 poly", markersize=1)
-ax1[1].plot(simulation[ITM, 1], y42, 'o',color='black', label="3 Laguerre poly", markersize=1)
-ax1[1].plot(simulation[ITM, 1], y52, 'ro', label="5 Laguerre poly", markersize=1)
+ax1[1].plot(simulation[ITM3, 252*2-1], y3, 'bo', label="Disc Payoff (from 3 Laguerre poly)", markersize=1)
+ax1[1].plot(simulation[ITM3, 252*2-1], y23, 'yo', label="2 poly", markersize=1)
+ax1[1].plot(simulation[ITM3, 252*2-1], y43, 'o',color='black', label="3 Laguerre poly", markersize=1)
+ax1[1].plot(simulation[ITM3, 252*2-1], y53, 'ro', label="5 Laguerre poly", markersize=1)
 
-x_vec = np.linspace(simulation[ITM,1].min(), simulation[ITM,1].max(), 200)
+x_vec = np.linspace(simulation[ITM3,252*2-1].min(), simulation[ITM3,252*2-1].max(), 200)
 ax1[1].plot(x_vec, putOpt.payoff(S=x_vec,K=1.1), 'k-', linewidth=1, label="Payoff Now")
 
-
 ax1[1].set_xlabel("X")
-ax1[1].set_title("Fits for t=1")
+ax1[1].set_title("Fits for t=2")
 
+
+ax1[0].plot(simulation[ITM2, 1], y2, 'bo', label="Disc Payoff (from 3 Laguerre poly)", markersize=1)
+ax1[0].plot(simulation[ITM2, 1], y22, 'yo', label="2 poly", markersize=1)
+ax1[0].plot(simulation[ITM2, 1], y42, 'o',color='black', label="3 Laguerre poly", markersize=1)
+ax1[0].plot(simulation[ITM2, 1], y52, 'ro', label="5 Laguerre poly", markersize=1)
+
+x_vec = np.linspace(simulation[ITM2,1].min(), simulation[ITM2,1].max(), 200)
+ax1[0].plot(x_vec, putOpt.payoff(S=x_vec,K=1.1), 'k-', linewidth=1, label="Payoff Now")
+
+
+ax1[0].set_xlabel("X")
+ax1[0].set_title("Fits for t=1/252")
+
+ax1[0].set_ylabel("$")
 plt.show()
 
 #%% 2 - Price American BETTER (very slow)

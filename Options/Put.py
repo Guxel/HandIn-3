@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Binary option of type
-Payoff = 1 if S > K else 0 end
+Put option
 """
 from .base import claim
 import numpy as np

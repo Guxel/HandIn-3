@@ -55,6 +55,91 @@ def Simulate_GBM_Dyamics(T,delta,S0,mu,sigma,n=1):
         path[i] = path[i-1]*(add + brownian[i-1] * vol)
     return path
 
+def simulateHestonDynamics(T,dt,S0,mu,V0,theta,kappa,epsilon,rho,n=1):
+    """
+    Uses dynamics for simulation, not accurate for large dt
+    """
+    m = int(T/dt)
+    path = np.zeros([m+1,n,2])
+    path[0,:,0] = S0
+    path[0,:,1] = V0
+    
+    stockBrownian = np.sqrt(dt)*np.random.normal(0,1,[m,n])
+    volMovements = epsilon*(rho*stockBrownian +np.sqrt(1-rho**2)*np.sqrt(dt)*np.random.normal(0,1,[m,n]))
+    
+    driftStock = mu*dt
+    kapdt = kappa * dt
+    driftVol = theta*kapdt
+    
+    
+    for i in range(1,m+1):
+        vol = np.sqrt(path[i-1,:,1])
+        path[i,:,0] = np.exp(
+                    np.log(path[i-1,:,0])
+                    +driftStock
+                    -0.5*path[i-1,:,1]*dt
+                    +vol*stockBrownian[i-1]
+                    )
+        path[i,:,1] = np.maximum(
+                                path[i-1,:,1]
+                                +driftVol-path[i-1,:,1]*kapdt
+                                +vol*volMovements[i-1]
+                                ,0)
+    return path
+
+def simulateHestonDynamicsBatched(T, dt, S0, mu, V0, theta, kappa, epsilon, rho, n=1, batchSize=10000,float32 = True):
+    """
+    Simulates the Heston dynamics in batches to avoid memory issues when n is large and dt is small.
+    """
+    m = int(T / dt)
+    results = []
+    batches = int(np.ceil(m / batchSize))
+    batchN =  int(np.ceil(n/batches))
+    print(f"Doing {batches} batches")
+    
+    driftStock = mu * dt
+    kapdt = kappa * dt
+    driftVol = theta * kapdt
+    
+    for b in range(batches):
+        print(f"Starting batch {b+1}")
+        n_batch = batchN if (b + 1) * batchN <= n else n - b * batchN
+        
+        if float32:
+            path = np.zeros([m + 1, n_batch, 2],dtype=np.float32)
+        else:
+            path = np.zeros([m + 1, n_batch, 2])
+        path[0, :, 0] = S0
+        path[0, :, 1] = V0
+        
+        stockBrownian = np.sqrt(dt) * np.random.normal(0, 1, [m, n_batch])
+        volMovements = epsilon * (
+            rho * stockBrownian +
+            np.sqrt(1 - rho ** 2) * np.sqrt(dt) * np.random.normal(0, 1, [m, n_batch])
+        )
+        
+        
+        for i in range(1, m + 1):
+            vol = np.sqrt(path[i - 1, :, 1])
+            path[i, :, 0] = np.exp(
+                np.log(path[i - 1, :, 0])
+                + driftStock
+                - 0.5 * path[i - 1, :, 1] * dt
+                + vol * stockBrownian[i - 1]
+            )
+            path[i, :, 1] = np.maximum(
+                path[i - 1, :, 1]
+                + driftVol - path[i - 1, :, 1] * kapdt
+                + vol * volMovements[i - 1],
+                0
+            )
+        
+        results.append(path)
+    
+    return np.concatenate(results, axis=1)
+
+
+
 def simulate_options(T,n,S0,r,sigma,K):
     payoffs = np.zeros((n,2))
     payoffs[:,0] = Simulate_GBM_End(T,S0,r,sigma,n)
